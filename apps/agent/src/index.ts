@@ -355,13 +355,39 @@ BEHAVIOR:
 - Remember the ids you create so you can refer back. If you forget, call
   list_shapes — don't ask the student.
 
-SLOW TOOLS — important:
-- think / generate_image / look_at_canvas all take 2-30 seconds.
-- For these three tools the system AUTOMATICALLY speaks a short filler
-  phrase when you call them ("Let me think about that for a moment", etc).
-- DO NOT also say "let me think" or "let me grab a picture" yourself —
-  it would double up. Just call the tool and, when it returns, go straight
-  into narrating the substantive answer.
+SLOW TOOLS — speak-first rule (CRITICAL for feeling responsive):
+- These tools take a noticeable amount of time:
+  - plan_lesson: 5–60s
+  - generate_image: 10–30s
+  - generate_video: 30–90s
+  - generate_minigame / repair_minigame: 30–90s
+  - think: 2–4s
+  - look_at_canvas: 2–3s
+- BEFORE calling ANY of these, FIRST speak one short conversational sentence
+  acknowledging what you're about to do. Then call the tool IN THE SAME TURN.
+  This is what makes you feel interactive instead of mute.
+  Examples:
+    Student: "teach me linear equations"
+    YOU: "Sure — let me put together a quick plan for that, one sec."
+    [then call plan_lesson]
+
+    Student: "show me a picture of a cell"
+    YOU: "Yep, coming right up."
+    [then call generate_image]
+
+    Student: "is this triangle a right triangle?"
+    YOU: "Let me take a look."
+    [then call look_at_canvas, then think if needed]
+
+    Student: "build me a pendulum simulator"
+    YOU: "Alright, building a quick 3D pendulum — give me about a minute."
+    [then call generate_minigame]
+- Keep the pre-call line SHORT — 5–12 words. Conversational, not formal.
+- Vary the wording so it doesn't sound canned ("one sec", "give me a
+  moment", "let me grab that", "almost there in a sec", etc).
+- After the tool returns, go STRAIGHT into the substantive narration of
+  the result — don't say "got it" or "here it is" first (the canvas
+  shows what landed).
 
 TOOL RESULT WARNINGS:
 - Some create_* tools may return data with a 'warning' field, e.g. when a
@@ -550,9 +576,15 @@ export default defineAgent({
             voice: cfg.voice,
             temperature: 0.8,
             instructions: personalizedInstructions,
-            realtimeInputConfig: {
-              activityHandling: "NO_INTERRUPTION" as never,
-            },
+            // NOTE: do NOT set `activityHandling: "NO_INTERRUPTION"`.
+            // We tried that to stop interruption-truncate crashes, but
+            // the side effect is much worse: Gemini queues user speech
+            // behind whatever the model is doing (a long tool-call
+            // cascade, a slow generation), and the queue never drains —
+            // result: the student talks and gets NO reply, ever. We
+            // instead block interruptions at the AgentSession layer
+            // (`turnHandling.interruption.enabled: false`) which is
+            // safe and preserves voice-reply behavior.
             thinkingConfig: { thinkingBudget: 0 },
             inputAudioTranscription: {},
             outputAudioTranscription: {},
@@ -585,14 +617,22 @@ export default defineAgent({
 
       const session = new voice.AgentSession({
         turnHandling: {
-          interruption: { enabled: false },
+          // Interruption ON: when the student speaks while the tutor is
+          // talking, the tutor stops and listens. Without this, the mic
+          // feels broken because nothing happens until the model finishes
+          // its current sentence. Earlier we disabled this to dodge a
+          // Gemini WS-1008 crash on truncate; the auto-restart wrapper
+          // already recovers if that hits again, and the UX cost of NO
+          // barge-in is much worse than the rare restart.
+          interruption: { enabled: true },
           // Start generating the reply as soon as VAD detects end-of-speech
           // instead of waiting for the framework's own endpointing. Cuts
           // perceived response latency by ~1-2s.
           preemptiveGeneration: { enabled: true },
         },
-        // No echo cancellation warmup — we have no barge-in, so the 3s
-        // suppression at session start was just dead air.
+        // Echo cancellation warmup is OFF for now — most browsers' AEC is
+        // adequate. If you start hearing the tutor's own voice echo back
+        // into its own input, bump this to ~1500ms.
         aecWarmupDuration: null,
         llm,
       });
@@ -627,28 +667,26 @@ export default defineAgent({
       // Instead, we trigger a fresh turn via `generateReply` with an
       // instruction that paraphrases the filler line in the tutor's own
       // voice. This is louder than canned TTS but matches the persona.
+      // narrator.say is intentionally a near-no-op for realtime models.
+      //
+      // With Gemini Live (and OpenAI Realtime), the model handles its own
+      // voice output from inside the current turn. There is no separate
+      // TTS we can drive. `session.generateReply()` enqueues a *new* turn
+      // — but while a tool call is in flight, that queued turn doesn't
+      // fire until AFTER the tool returns, which means our "still
+      // working…" filler would land AFTER the result and stomp on the
+      // real narration. We tried it; it was worse than silence.
+      //
+      // Strategy now: tell the model in its system prompt to ALWAYS
+      // speak one short conversational sentence BEFORE invoking a slow
+      // tool, then let the canvas skeleton + the model's own voice
+      // handle the rest. Engagement during the wait is the model's job,
+      // not the agent worker's.
+      //
+      // This stub stays defined so canvas-tools.ts can call it without
+      // a null check; it just logs and moves on.
       narrator.say = (text: string) => {
-        try {
-          const s = session as unknown as {
-            generateReply?: (opts: { instructions: string }) => unknown;
-            say?: (s: string) => unknown;
-          };
-          if (typeof s.generateReply === "function") {
-            s.generateReply({
-              instructions: `Briefly say "${text.replace(/"/g, "'")}" to the student in your own conversational voice. One short sentence. Do not repeat any explanation; this is just a filler line while a long tool call is in flight.`,
-            });
-          } else if (typeof s.say === "function") {
-            // Fallback for non-realtime (TTS-backed) configurations.
-            s.say(text);
-          }
-        } catch (err) {
-          // Don't spam logs — engagement is best-effort. A single warn
-          // line is enough to diagnose if it ever flat-out breaks.
-          console.warn(
-            "[narrator] say skipped:",
-            err instanceof Error ? err.message : String(err),
-          );
-        }
+        if (text) console.log(`[narrator] (skipped) ${text.slice(0, 80)}`);
       };
 
       // Subscribe to the realtime model's transcription + state events on

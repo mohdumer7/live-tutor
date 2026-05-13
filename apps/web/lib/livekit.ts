@@ -48,8 +48,17 @@ export async function connectToRoom(opts: ConnectOptions): Promise<Room> {
     adaptiveStream: true,
     dynacast: true,
     publishDefaults: {
+      // RED (redundant encoding) — keep ON; cheap insurance against packet
+      // loss on bad networks.
       red: true,
-      dtx: true,
+      // DTX (discontinuous transmission) — keep OFF for the tutor. DTX
+      // suppresses packet emission during silence and resumes once the
+      // local browser thinks you're talking. Gemini Live's VAD lives on
+      // the OTHER side of the wire and needs continuous audio frames to
+      // see the silence→speech transition; with DTX on it sees gaps
+      // instead and the `onInputSpeechStarted` event never fires, so the
+      // tutor never replies even though your mic is open.
+      dtx: false,
     },
   });
 

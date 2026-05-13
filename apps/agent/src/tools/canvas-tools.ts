@@ -386,7 +386,7 @@ export function createCanvasTools(
 
     generate_image: llm.tool({
       description:
-        "Generate an AI image and place it on the canvas. Useful when a picture would help (e.g. 'show me a cell', 'draw a labeled diagram of a triangle'). Takes 10-30 seconds. The system speaks a short filler phrase automatically — do NOT say 'let me get that' yourself. Returns a shape id.",
+        "Generate an AI image and place it on the canvas. Useful when a picture would help (e.g. 'show me a cell', 'draw a labeled diagram of a triangle'). Takes 10-30 seconds. BEFORE calling, say one short conversational line ('coming right up', 'give me a sec'). Returns a shape id.",
       parameters: generateImageArgs,
       execute: async (args: GenerateImageArgs) => {
         const stopEngage = narrator.engage?.("image");
@@ -445,7 +445,7 @@ export function createCanvasTools(
 
     look_at_canvas: llm.tool({
       description:
-        "Take a visual snapshot of the canvas and have a vision model describe it. Use this when the digest text isn't enough — e.g. the student just drew a freeform shape, or said 'is this right?' / 'what about this?'. You can pass a focused question (e.g. 'is the student's triangle a right triangle?'). Takes 2-3s. The system speaks a short filler phrase automatically — do NOT say 'let me look' yourself. Returns a text description.",
+        "Take a visual snapshot of the canvas and have a vision model describe it. Use this when the digest text isn't enough — e.g. the student just drew a freeform shape, or said 'is this right?' / 'what about this?'. You can pass a focused question (e.g. 'is the student's triangle a right triangle?'). Takes 2-3s. BEFORE calling, say 'let me take a look' or similar. Returns a text description.",
       parameters: lookAtCanvasArgs,
       execute: async (args: LookAtCanvasArgs) => {
         const stopEngage = narrator.engage?.("looking");
@@ -516,7 +516,7 @@ export function createCanvasTools(
 
     generate_video: llm.tool({
       description:
-        "Generate a short AI video clip and place it on the canvas. Best for things words can't show: motion, time-lapse, processes (a paper plane gliding, mitosis, water cycle). Takes 30-90 seconds — the system speaks an automatic filler phrase. Aspect ratio is picked from w/h. Returns a shape id.",
+        "Generate a short AI video clip and place it on the canvas. Best for things words can't show: motion, time-lapse, processes (a paper plane gliding, mitosis, water cycle). Takes 30-90 seconds. BEFORE calling, warn the student it'll take a moment ('this'll take about a minute, hang tight'). Aspect ratio is picked from w/h. Returns a shape id.",
       parameters: generateVideoArgs,
       execute: async (args: GenerateVideoArgs) => {
         const stopEngage = narrator.engage?.("video");
@@ -669,7 +669,7 @@ export function createCanvasTools(
 
     plan_lesson: llm.tool({
       description:
-        "FIRST step when the student asks to learn something broad ('teach me linear algebra', 'help me understand photosynthesis'). Calls a curriculum researcher to produce a structured 4-7 module lesson plan, places it on the canvas as a visible checklist, and returns the modules so you know exactly what to teach. After this returns, briefly narrate the plan (one sentence per first 1-2 modules max), then start teaching module 1. Takes 3-6 seconds — automatic filler narration.",
+        "FIRST step when the student asks to learn something broad ('teach me linear algebra', 'help me understand photosynthesis'). Calls a curriculum researcher to produce a structured 4-7 module lesson plan, places it on the canvas as a visible checklist, and returns the modules so you know exactly what to teach. BEFORE calling, say one short conversational line ('sure, let me put a plan together'). Takes 5-30 seconds. AFTER it returns, briefly narrate the plan (one sentence per first 1-2 modules max), then start teaching module 1.",
       parameters: planLessonArgs,
       execute: async (args: PlanLessonArgs) => {
         const stopEngage = narrator.engage?.("plan");
@@ -764,7 +764,7 @@ export function createCanvasTools(
 
     think: llm.tool({
       description:
-        "When the student asks a hard problem you'd rather not improvise on (multi-step math, careful proofs, tricky 'why does this work' questions), pause and consult a smart reasoning model. Call as think({question, context?}). Takes 2-4 seconds. The system speaks a short filler phrase automatically — do NOT say 'let me think' yourself. Returns a step-by-step answer (with $...$ LaTeX); rephrase it naturally for the student and write any formulas using create_equation as you narrate.",
+        "When the student asks a hard problem you'd rather not improvise on (multi-step math, careful proofs, tricky 'why does this work' questions), pause and consult a smart reasoning model. Call as think({question, context?}). Takes 2-4 seconds. BEFORE calling, say 'let me think about this for a sec' or similar. Returns a step-by-step answer (with $...$ LaTeX); rephrase it naturally for the student and write any formulas using create_equation as you narrate.",
       parameters: thinkArgs,
       execute: async (args: ThinkArgs) => {
         const stopEngage = narrator.engage?.("thinking");
