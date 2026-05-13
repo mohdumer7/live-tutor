@@ -26,6 +26,10 @@ No greetings, no preamble, no markdown. Just the description.`;
 
 export type DescribeCanvasInput = {
   pngBase64: string;
+  // image/png | image/jpeg | image/gif | image/webp — Anthropic supported set.
+  // Default to image/png for backward compat; the FE now ships jpeg to keep
+  // the data channel payload under LiveKit's 64KB limit.
+  mediaType?: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
   width: number;
   height: number;
   question?: string;
@@ -66,7 +70,7 @@ export async function describeCanvas(
               type: "image",
               source: {
                 type: "base64",
-                media_type: "image/png",
+                media_type: input.mediaType ?? "image/png",
                 data: input.pngBase64,
               },
             },

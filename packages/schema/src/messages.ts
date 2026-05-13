@@ -137,7 +137,13 @@ export const minigameErrorEnvelope = z.object({
   description: z.string().default(""),
   title: z.string().default(""),
   // Snapshot of current HTML so the agent can ask Claude to patch it.
-  brokenHtml: z.string().min(1).max(120_000),
+  // brokenHtml is optional — the agent has the html cached server-side from
+  // the original generate_minigame call (see canvas-tools.ts minigameCache).
+  // The FE used to ship the full html here, but that overran LiveKit's 64KB
+  // data channel limit for heavy 3D games. The agent now reads from cache
+  // and falls back to a "give up if cache miss" path so we don't have to
+  // round-trip the html again.
+  brokenHtml: z.string().max(8_000).optional(),
   // Captured error rows. We keep a short list (3-5) so the agent gets the
   // most informative trace without blowing token budgets.
   errors: z

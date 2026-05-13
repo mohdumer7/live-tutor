@@ -385,7 +385,9 @@ function MinigameFrame({
         shapeId,
         description: description ?? "",
         title: title ?? "",
-        brokenHtml: html,
+        // brokenHtml omitted — agent reads from its in-memory cache to
+        // stay under LiveKit's 64KB data channel limit. See agent's
+        // minigame_error handler in index.ts.
         errors: errs,
         attempt,
         timestamp: Date.now(),

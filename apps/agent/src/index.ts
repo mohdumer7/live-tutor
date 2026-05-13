@@ -972,10 +972,23 @@ If it's not math (a doodle, a shape, etc.), just acknowledge briefly in one shor
             `repairing minigame ${env.shapeId.slice(-6)}`,
           );
           try {
+            // Look up the original html from cache. The FE no longer ships
+            // it in the envelope (it would blow past the 64KB data channel
+            // limit for heavy 3D games). If the cache miss (e.g. agent was
+            // restarted since the game was generated), we have no way to
+            // patch — log and bail.
+            const cached = minigameCache.get(env.shapeId);
+            const brokenHtml = env.brokenHtml || cached?.html;
+            if (!brokenHtml) {
+              console.warn(
+                `[agent] minigame ${env.shapeId} crashed but no html cached (agent restarted?); skipping auto-repair`,
+              );
+              return;
+            }
             const result = await regenerateMinigame({
-              description: env.description,
-              title: env.title,
-              brokenHtml: env.brokenHtml,
+              description: env.description || cached?.description || "",
+              title: env.title || cached?.title || "Minigame",
+              brokenHtml,
               errors: env.errors,
             });
             if (!result.ok) {

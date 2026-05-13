@@ -454,9 +454,15 @@ export function createCanvasTools(
           const snap = (await rpc.call({
             tool: "look_at_canvas",
             args,
-          })) as { pngBase64: string; width: number; height: number };
+          })) as {
+            pngBase64: string;
+            mediaType?: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+            width: number;
+            height: number;
+          };
           const out = await describeCanvas({
             pngBase64: snap.pngBase64,
+            mediaType: snap.mediaType,
             width: snap.width,
             height: snap.height,
             question: args.question,

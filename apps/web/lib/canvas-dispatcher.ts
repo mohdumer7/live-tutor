@@ -716,30 +716,78 @@ async function handleToolCall(
     }
 
     case "look_at_canvas": {
-      // Serialize the entire current page to a PNG data URL, then strip the
-      // prefix so we can ship just the base64 payload to the agent.
-      const ids = [...editor.getCurrentPageShapeIds()];
+      // Serialize a JPEG snapshot back to the agent. Constraints:
+      //
+      // 1. LiveKit data channel caps a single message at 64KB, so we
+      //    progressively downscale until base64 fits under ~50KB.
+      //
+      // 2. tldraw's image export hangs or returns garbage on shapes whose
+      //    visual content lives in a sandboxed iframe — minigames and
+      //    videos. We exclude those types from the snapshot (they're
+      //    listed in scene-state by name anyway) and only render the
+      //    student-meaningful shapes (text, equations, plots, drawings,
+      //    images, SVGs, curriculum, etc).
+      //
+      // 3. The agent's RPC client times out tool calls at 10s, so we keep
+      //    the whole pipeline well under that — fewer attempts, smaller
+      //    starting scale than before.
+      const SKIP_TYPES = new Set(["minigame", "video", "skeleton"]);
+      const ids = [...editor.getCurrentPageShapeIds()].filter((id) => {
+        const s = editor.getShape(id);
+        return s && !SKIP_TYPES.has((s.type as string) ?? "");
+      });
       if (ids.length === 0) {
-        return errResult(callId, "canvas is empty");
+        return errResult(
+          callId,
+          "no capturable shapes on this page (minigames and videos can't be photographed — ask the student to point at the specific equation or drawing they want me to read).",
+        );
       }
+      const MAX_BASE64_BYTES = 50_000;
+      // Two passes max so we stay well under the agent's 10s RPC timeout
+      // even on busy canvases. Lower starting scale than before since
+      // vision models don't need 1× resolution to read a whiteboard.
+      const ATTEMPTS = [
+        { scale: 0.5, quality: 0.65 },
+        { scale: 0.28, quality: 0.5 },
+      ];
       try {
-        const result = await editor.toImageDataUrl(ids, {
-          format: "png",
-          background: true,
-          padding: 16,
-          scale: 1,
-        });
-        const url = result.url;
-        const comma = url.indexOf(",");
-        const pngBase64 = comma > -1 ? url.slice(comma + 1) : url;
+        let lastBase64 = "";
+        let lastWidth = 0;
+        let lastHeight = 0;
+        let lastBytes = 0;
+        for (const a of ATTEMPTS) {
+          const result = await editor.toImageDataUrl(ids, {
+            format: "jpeg",
+            background: true,
+            padding: 16,
+            scale: a.scale,
+            quality: a.quality,
+          });
+          const url = result.url;
+          const comma = url.indexOf(",");
+          const base64 = comma > -1 ? url.slice(comma + 1) : url;
+          lastBase64 = base64;
+          lastWidth = Math.round(result.width);
+          lastHeight = Math.round(result.height);
+          lastBytes = base64.length;
+          if (base64.length <= MAX_BASE64_BYTES) break;
+        }
+        if (lastBytes > MAX_BASE64_BYTES) {
+          console.warn(
+            `[canvas-dispatcher] look_at_canvas snapshot still ${lastBytes}B after all downscale attempts; shipping anyway`,
+          );
+        }
         return {
           kind: "tool_result",
           callId,
           ok: true,
           data: {
-            pngBase64,
-            width: Math.round(result.width),
-            height: Math.round(result.height),
+            // Field name kept as pngBase64 for backward compat; content
+            // is JPEG. mediaType tells the agent which to send to Anthropic.
+            pngBase64: lastBase64,
+            mediaType: "image/jpeg",
+            width: lastWidth,
+            height: lastHeight,
           },
         };
       } catch (err) {

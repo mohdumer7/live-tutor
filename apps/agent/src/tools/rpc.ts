@@ -8,7 +8,12 @@ import {
   type ToolResultEnvelope,
 } from "@live-tutor/schema";
 
-const TOOL_TIMEOUT_MS = 10_000;
+// Per-tool RPC timeout. 10s was too tight for `look_at_canvas` on a busy
+// canvas (tldraw's image export can take 3-5s × multiple downscale
+// attempts) and tools that internally roundtrip to slow services.
+// Other tools (create_text / update_shape / delete_shape) return in <100ms
+// so the larger budget doesn't slow the common case.
+const TOOL_TIMEOUT_MS = 25_000;
 const RETRY_BACKOFF_MS = 200;
 const DEDUP_WINDOW_MS = 200;
 const decoder = new TextDecoder();
