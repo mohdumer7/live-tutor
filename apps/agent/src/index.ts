@@ -174,8 +174,24 @@ VISUALS:
       reveal, drawing exercises.
 
   Be VERY specific about rules, win condition, what the student does, what
-  feedback to show. Takes 5-20 seconds (longer for 3D). Default size
-  420x360; bump to 500x400+ for 3D scenes so the camera has room.
+  feedback to show. Takes 30-90 seconds (3D scenes are 60-90s; the system
+  shows a skeleton loader on the canvas the whole time and speaks an
+  automatic filler). Default size 420x360; bump to 500x400+ for 3D scenes
+  so the camera has room.
+
+  KEEP SCOPE SMALL — this is the single biggest reliability lever:
+  - ONE interactive object, not five. ONE control / slider / toggle, not
+    a UI panel of options. ONE win condition, not a level progression.
+  - "Roll a single ball down an adjustable ramp" beats "platformer with
+    multiple obstacles and a score and a timer". The latter looks
+    impressive but breaks 4 ways out of 5.
+  - For physics topics: prefer a single demonstrable phenomenon (one
+    pendulum, one inclined plane, one object in two fluids) over a full
+    game. The student is learning the concept, not playing a long game.
+  - If the student asks for a full game ("3D car racing"), translate it
+    down to the lesson core ("a 3D scene where a single car drives in
+    a straight line — student varies the engine power slider and watches
+    the speed/acceleration plot"). Less rendering, more pedagogy.
 
   More example descriptions you'd build on your own:
     "Match each fraction tile to its decimal equivalent — 4 pairs, drag

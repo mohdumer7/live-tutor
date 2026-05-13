@@ -275,7 +275,7 @@ window.__tutorReady('three-scene');
 </script>
 </body>
 </html>
-\\\`\\\`\\\`
+\`\`\`
 
 Keep the scope SMALL. A reliable simple game beats an ambitious broken one.
 Examples that work well:
@@ -411,13 +411,23 @@ Return a corrected version of the document that fixes the underlying issue and r
 
   const start = Date.now();
   try {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 8000,
-      temperature: 0.3,
+    // Regen uses the same powerful model as the original generation —
+    // we want repair attempts to actually succeed, not generate a
+    // different broken version of the same bug.
+    const regenParams: Anthropic.MessageCreateParamsNonStreaming = {
+      model: MINIGAME_MODEL,
+      max_tokens: 12000,
+      temperature: MINIGAME_THINKING_BUDGET >= 1024 ? 1 : 0.3,
       system: REGEN_SYSTEM_PROMPT,
       messages: [{ role: "user", content: userText }],
-    });
+    };
+    if (MINIGAME_THINKING_BUDGET >= 1024) {
+      regenParams.thinking = {
+        type: "enabled",
+        budget_tokens: MINIGAME_THINKING_BUDGET,
+      };
+    }
+    const response = await client.messages.create(regenParams);
     const latencyMs = Date.now() - start;
     let text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
@@ -448,6 +458,136 @@ Return a corrected version of the document that fixes the underlying issue and r
   }
 }
 
+// Model defaults to Opus 4.7 for minigame generation — long-form code
+// generation is where Opus's advantage over Sonnet is clearest, and broken
+// games cost the student more than the marginal token spend. Override with
+// MINIGAME_MODEL if you want to A/B against Sonnet for a session.
+const MINIGAME_MODEL = process.env.MINIGAME_MODEL || "claude-opus-4-7";
+// Extended thinking budget. ~6k thinking tokens is enough to plan a small
+// game's structure before writing code. Disable by setting to 0.
+const MINIGAME_THINKING_BUDGET = Number(
+  process.env.MINIGAME_THINKING_BUDGET ?? "6000",
+);
+
+// Pre-flight validation: scan generated HTML for the patterns that cause
+// silent failures (no exception fires, host watchdog can't detect, student
+// just sees a broken game). Returning a non-empty issues array triggers a
+// one-shot regeneration with the issues fed back to the model.
+function validateMinigameHtml(html: string): string[] {
+  const issues: string[] = [];
+
+  // Must call __tutorReady or the host watchdog will time out.
+  if (!/window\.__tutorReady\s*\(/.test(html)) {
+    issues.push(
+      "Missing window.__tutorReady() call. Every successful boot path MUST call window.__tutorReady() as the last line of setup so the host knows the scene is up. Without this the 12-second watchdog fires and the game gets regenerated.",
+    );
+  }
+
+  // No inline on*= handlers when a module script is in play — module-scoped
+  // names aren't on window, so the inline handler will throw ReferenceError
+  // (or silently do nothing) when clicked.
+  const hasModule = /<script[^>]+type\s*=\s*["']module["']/i.test(html);
+  if (hasModule) {
+    const inlineMatches = html.match(
+      /\son(?:click|input|change|submit|keydown|keyup|load|mouseenter|mouseleave|pointerdown|pointerup)\s*=\s*["']/gi,
+    );
+    if (inlineMatches && inlineMatches.length > 0) {
+      const sample = inlineMatches.slice(0, 3).join(", ");
+      issues.push(
+        `Inline event handler attributes detected (${sample}) alongside <script type="module">. Inline handlers run in the global scope but module-scoped functions are NOT on window, so the click will throw ReferenceError or silently do nothing. Replace ALL inline handlers with addEventListener inside the module.`,
+      );
+    }
+  }
+
+  // Fixed pixel dimensions on the root container break resize.
+  if (
+    /(?:html|body|#wrap|#root|#app|#game|#container)\s*\{[^}]*\b(?:width|height)\s*:\s*\d+px/i.test(
+      html,
+    )
+  ) {
+    issues.push(
+      "Fixed pixel width/height on a root container detected. The iframe is resizable — use 100% / 100vw / 100vh on html / body / #wrap so the layout follows the iframe size.",
+    );
+  }
+
+  // Bare-specifier imports must match the import map. Catch typos.
+  const bareImports = [
+    ...html.matchAll(/import\s+(?:[\s\S]+?)\s+from\s+["']([^"']+)["']/g),
+  ]
+    .map((m) => m[1])
+    .filter((s): s is string => typeof s === "string");
+  const allowed = new Set(["three", "cannon-es", "matter-js", "tone"]);
+  for (const spec of bareImports) {
+    if (/^https?:\/\//.test(spec) || /^[./]/.test(spec)) continue;
+    if (spec.startsWith("three/addons/")) continue;
+    const root = spec.split("/")[0] ?? spec;
+    if (allowed.has(root)) continue;
+    issues.push(
+      `Module import "${spec}" is not in the host's import map. Only \`three\`, \`three/addons/*\`, \`cannon-es\`, \`matter-js\`, and \`tone\` resolve as bare specifiers. Replace with one of these or a full URL.`,
+    );
+  }
+
+  return issues;
+}
+
+// Single Claude call for minigame HTML. Used by generateMinigame as the
+// first pass AND (with `feedback` set) as a self-correcting retry when
+// pre-flight validation finds issues.
+async function callClaudeForMinigame(
+  client: Anthropic,
+  args: GenerateMinigameArgs,
+  feedback?: string,
+): Promise<{ ok: true; html: string; latencyMs: number } | { ok: false; error: string }> {
+  const baseText = `Build a minigame: ${args.description}\n\nTarget size: ${Math.round(
+    args.w,
+  )}px wide × ${Math.round(args.h)}px tall.`;
+  const userText = feedback
+    ? `${baseText}\n\nPREVIOUS ATTEMPT FAILED VALIDATION. Address EACH of these issues in your new output, then ship the corrected document:\n${feedback}`
+    : baseText;
+
+  const useThinking =
+    MINIGAME_THINKING_BUDGET >= 1024 && !MINIGAME_MODEL.includes("haiku");
+
+  const start = Date.now();
+  try {
+    const params: Anthropic.MessageCreateParamsNonStreaming = {
+      model: MINIGAME_MODEL,
+      // 12k caps out a generous game; 8k was clipping complex 3D scenes.
+      max_tokens: 12000,
+      // Lower temp = fewer "creative" deviations from the scaffold.
+      temperature: useThinking ? 1 : 0.3,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userText }],
+    };
+    if (useThinking) {
+      params.thinking = {
+        type: "enabled",
+        budget_tokens: MINIGAME_THINKING_BUDGET,
+      };
+    }
+    const response = await client.messages.create(params);
+    const latencyMs = Date.now() - start;
+    let text = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("\n")
+      .trim();
+    text = text.replace(/^```(?:html)?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
+    if (!text.toLowerCase().includes("<!doctype") && !text.includes("<html")) {
+      return {
+        ok: false,
+        error: "Claude returned something that doesn't look like HTML.",
+      };
+    }
+    return { ok: true, html: text, latencyMs };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export async function generateMinigame(
   args: GenerateMinigameArgs,
 ): Promise<GenerateMinigameResult> {
@@ -460,46 +600,37 @@ export async function generateMinigame(
     };
   }
 
-  const userText = `Build a minigame: ${args.description}\n\nTarget size: ${Math.round(args.w)}px wide × ${Math.round(args.h)}px tall.`;
+  const totalStart = Date.now();
 
-  const start = Date.now();
-  try {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      // Self-contained HTML for a small game is usually 1-3k tokens; cap
-      // generously to allow some flourishes.
-      max_tokens: 8000,
-      temperature: 0.5,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userText }],
-    });
-    const latencyMs = Date.now() - start;
-    let text = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("\n")
-      .trim();
+  // Pass 1.
+  let result = await callClaudeForMinigame(client, args);
+  if (!result.ok) return { ok: false, error: result.error };
+  let issues = validateMinigameHtml(result.html);
 
-    // Defensive: strip ``` fences if Claude added them despite instructions.
-    text = text.replace(/^```(?:html)?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
-
-    if (!text.toLowerCase().includes("<!doctype") && !text.includes("<html")) {
-      return {
-        ok: false,
-        error:
-          "Claude returned something that doesn't look like an HTML document.",
-      };
+  // Pass 2 (one-shot retry) — only if validation found pattern-level issues.
+  if (issues.length > 0) {
+    console.warn(
+      `[minigame-gen] pre-flight validation found ${issues.length} issue(s); retrying with feedback`,
+      issues,
+    );
+    const feedback = issues.map((i, n) => `${n + 1}. ${i}`).join("\n");
+    const retry = await callClaudeForMinigame(client, args, feedback);
+    if (retry.ok) {
+      result = retry;
+      issues = validateMinigameHtml(retry.html);
+      if (issues.length > 0) {
+        console.warn(
+          "[minigame-gen] post-retry validation STILL has issues — shipping anyway, the runtime watchdog will catch:",
+          issues,
+        );
+      }
     }
-    return {
-      ok: true,
-      html: text,
-      title: args.title || "Minigame",
-      latencyMs,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
   }
+
+  return {
+    ok: true,
+    html: result.html,
+    title: args.title || "Minigame",
+    latencyMs: Date.now() - totalStart,
+  };
 }
