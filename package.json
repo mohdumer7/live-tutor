@@ -1,0 +1,31 @@
+{
+  "name": "live-tutor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Live AI Tutor — voice-driven tutor with shared canvas, powered by LiveKit + Gemini Live",
+  "packageManager": "pnpm@10.10.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@ffmpeg-installer/darwin-arm64",
+      "@ffmpeg-installer/darwin-x64",
+      "@ffmpeg-installer/linux-x64",
+      "@ffmpeg-installer/linux-arm64",
+      "@google/genai",
+      "protobufjs"
+    ]
+  }
+}

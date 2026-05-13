@@ -1,0 +1,11 @@
+{
+  "extends": "@live-tutor/tsconfig/node.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["dist", "node_modules"]
+}

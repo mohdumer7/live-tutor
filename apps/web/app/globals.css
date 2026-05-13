@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+html,
+body {
+  height: 100%;
+  background: #0b0b0f;
+  color: #e6e6ea;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+/* Hide scrollbars on the quick-action chip strip for mobile, while still
+   allowing horizontal scroll. */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

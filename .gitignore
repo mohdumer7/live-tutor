@@ -1,0 +1,25 @@
+node_modules
+.next
+dist
+build
+out
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Turbo
+.turbo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Misc
+.DS_Store
+*.pem
+.vscode/*
+!.vscode/settings.json
+.idea

@@ -1,0 +1,39 @@
+{
+  "name": "@live-tutor/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --turbopack --port 3030",
+    "build": "next build",
+    "start": "next start --port 3030",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .next .turbo"
+  },
+  "dependencies": {
+    "@live-tutor/schema": "workspace:*",
+    "@tldraw/assets": "^4.5.10",
+    "@tldraw/tlschema": "^4.5.10",
+    "function-plot": "^1.25.1",
+    "katex": "^0.16.21",
+    "livekit-client": "^2.18.7",
+    "livekit-server-sdk": "^2.15.2",
+    "next": "^15.5.15",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tldraw": "^4.5.10"
+  },
+  "devDependencies": {
+    "@live-tutor/tsconfig": "workspace:*",
+    "@tailwindcss/postcss": "^4.1.13",
+    "@types/katex": "^0.16.7",
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "dotenv": "^16.4.7",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.7.3"
+  }
+}

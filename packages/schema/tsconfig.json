@@ -1,0 +1,8 @@
+{
+  "extends": "@live-tutor/tsconfig/base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "src"
+  },
+  "include": ["src/**/*"]
+}
